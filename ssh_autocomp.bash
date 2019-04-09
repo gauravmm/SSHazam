@@ -2,6 +2,7 @@
 SSH_CONFIG_PATHS=~/.ssh/config
 
 dbgecho() {
+    # Comment these out to disable printing debug messages:
     echo "$@"
 }
 
