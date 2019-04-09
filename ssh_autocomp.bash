@@ -3,14 +3,53 @@ SSH_CONFIG_PATHS=~/.ssh/config
 # Maximum number of ControlMaster connections to open:
 MAX_CM_OPEN=1
 # If there are more than MAX_CM_OPEN connections possible, use this heuristic to select the servers to connect to:
-HEURISTIC=""
+HEURISTIC="last-n-conn"
+HEURISTIC_CACHE_LNC=~/.ssh_last_n
 
 dbgecho() {
     # Comment these out to disable printing debug messages:
     echo "$@" >> debug.log
 }
 
-__open_conn() {
+function __make_cache_lnc() {
+    local HOSTS
+    HOSTS=("$@")
+
+    # TODO: Run this if the cache is old or if the SSH config file is newer than the cache.
+
+    (
+        if flock -n 199; then
+            local ORDERED
+            ORDERED=()
+            for LINE in $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh'); do
+                # dbgecho "SEARCHING FOR ${HOST[@]} IN $LINE"
+                for HOST in "${HOSTS[@]}"; do
+                    if [ ! -z "$HOST" ] && [[ $LINE == *$HOST* ]]; then
+                        dbgecho "ORDERED B: $HOST"
+                        ORDERED+=($HOST)
+                        HOSTS=("${HOSTS[@]/$HOST}")
+                        break
+                    fi
+                done
+
+                if [ "${#HOSTS}" = 0 ]; then
+                    break
+                fi
+            done
+
+            # Write output to cache:
+            printf "%s\n" "${ORDERED[@]}" > "$HEURISTIC_CACHE_LNC"
+            dbgecho "ORDERED: ${ORDERED[@]}"
+
+            rm "$HEURISTIC_CACHE_LNC.lock"
+        else
+            dbgecho "LNC :: CANNOT ACQUIRE CACHE LOCK"
+        fi
+    ) 199>"$HEURISTIC_CACHE_LNC.lock"
+
+}
+
+function __open_conn() {
     local SRVSTR CMPATH
     SRVSTR="$2@$1"
     SRVSTR="${SRVSTR#@}" # Remove leading connection if it exists
@@ -37,10 +76,10 @@ __open_conn() {
 
     dbgecho "OPEN CONTROLMASTER CONNECTION TO $SRVSTR"
     # Start an SSH  (-M) master connection, (-N) do not execute anything, (-n) do not read anything from stdin, (-f) go to background, (-oBatchMode) fail rather than ask for a password
-    ( ssh -MNnf -oBatchMode=yes "$SRVSTR" & )
+    ( ssh -MNnf -oBatchMode=yes "$SRVSTR" >/dev/null 2>&1 & )
 }
 
-_ssh() 
+function _ssh() 
 {
     dbgecho "*"
 
@@ -79,8 +118,9 @@ _ssh()
 
     if [ "${#TARGETS[@]}" -gt $MAX_CM_OPEN ]; then
         dbgecho "TOO MANY TARGETS: MAX_CM_OPEN: $MAX_CM_OPEN"
-        if [ "$HEURISTIC" = "last-n-connections" ]; then 
-            echo "TODO"
+        if [ "$HEURISTIC" = "last-n-conn" ]; then
+            __make_cache_lnc ${HOSTS[@]}
+            dbgecho "TODO"
         else
             dbgecho "NO HEURISTIC; ABANDONING ATTEMPT"
             return 128
