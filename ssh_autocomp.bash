@@ -1,9 +1,13 @@
 # Space-separated list of paths to search for HOST directives:
 SSH_CONFIG_PATHS=~/.ssh/config
+# Maximum number of ControlMaster connections to open:
+MAX_CM_OPEN=1
+# If there are more than MAX_CM_OPEN connections possible, use this heuristic to select the servers to connect to:
+HEURISTIC=""
 
 dbgecho() {
     # Comment these out to disable printing debug messages:
-    echo "$@"
+    echo "$@" >> debug.log
 }
 
 __open_conn() {
@@ -38,30 +42,54 @@ __open_conn() {
 
 _ssh() 
 {
-    local MAX_CM_OPEN LAST_WORD
-    # Maximum number of ControlMaster connections to open:
-    MAX_CM_OPEN=1
+    dbgecho "*"
+
+    local LAST_WORD LAST_SERVER LAST_USER
 
     LAST_WORD="${COMP_WORDS[COMP_CWORD]}"
     LAST_SERVER="${LAST_WORD#*@}"
 
     # Check if a username is specified:
     case "${LAST_WORD%$LAST_SERVER}" in
-        *@) LAST_USER="${LAST_WORD%@}";; # If the string is <user>@<servername>, keep the <user>
+        *@) LAST_USER="${LAST_WORD%@$LAST_SERVER}";; # If the string is <user>@<servername>, keep the <user>
         *)  LAST_USER="";; # Otherwise, we don't know <user>
     esac
 
-    local HOSTS
+    local HOSTS TARGETS
     COMPREPLY=()
     HOSTS=$(grep '^Host' $SSH_CONFIG_PATHS 2>/dev/null | grep -v '[?*]' | cut -d ' ' -f 2-)
-    COMPREPLY=( $(compgen -W "$HOSTS" -- $LAST_SERVER) )
+    TARGETS=($(compgen -W "$HOSTS" -- $LAST_SERVER))
+
+    if [ "${#TARGETS[@]}" = 0 ]; then
+        dbgecho "NO TARGETS FOUND"
+        return 127
+    fi
+
+    dbgecho "TARGETS ${#TARGETS[@]}: ${TARGETS[@]/#/-> }"
+
+    # If the username is defined, add that to the front of each suggested server:
+    if [ -z "$LAST_USER" ]; then 
+        COMPREPLY=(${TARGETS[@]})
+    else
+        COMPREPLY=(${TARGETS[@]/#/$LAST_USER@})
+    fi
     # Now COMPREPLY contains the list of matching hosts.
 
-    if [ ${#COMPREPLY[@]} -le $MAX_CM_OPEN ]; then
-        for TARGET in "${COMPREPLY[@]}"; do
-            __open_conn "$TARGET" $LAST_USER
-        done
+    dbgecho "COMPREPLY ${#COMPREPLY[@]}: ${COMPREPLY[@]/#/-> }"
+
+    if [ "${#TARGETS[@]}" -gt $MAX_CM_OPEN ]; then
+        dbgecho "TOO MANY TARGETS: MAX_CM_OPEN: $MAX_CM_OPEN"
+        if [ "$HEURISTIC" = "last-n-connections" ]; then 
+            echo "TODO"
+        else
+            dbgecho "NO HEURISTIC; ABANDONING ATTEMPT"
+            return 128
+        fi
     fi
+
+    for TARGET in "${COMPREPLY[@]}"; do
+        __open_conn "$TARGET" $LAST_USER
+    done
 
     return 0
 }
