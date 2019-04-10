@@ -11,11 +11,26 @@ dbgecho() {
     echo "$@" >> debug.log
 }
 
+function __maybe_make_cache_lnc() {
+    # TODO: Run this if the cache is old or if the SSH config file is newer than the cache.
+
+    local TS_CACHE TS_CONFIG CFG TS_CFG
+
+    TS_CACHE=$(stat -c %Y $HEURISTIC_CACHE_LNC)
+    TS_CONFIG=$(date -d "-1 day" +%s) # One day ago; this way we renew the cache daily
+    for CFG in $SSH_CONFIG_PATHS; do
+        TS_CFG=$(stat -c %Y $CFG)
+        (( $TS_CFG > $TS_CONFIG )) && TS_CONFIG=$TS_CFG
+    done
+
+    if [ $TS_CONFIG -gt $TS_CACHE ]; then
+        __make_cache_lnc "$@"
+    fi
+}
+
 function __make_cache_lnc() {
     local HOSTS
     HOSTS=("$@")
-
-    # TODO: Run this if the cache is old or if the SSH config file is newer than the cache.
 
     (
         if flock -n 199; then
@@ -32,7 +47,7 @@ function __make_cache_lnc() {
                     fi
                 done
 
-                if [ "${#HOSTS}" = 0 ]; then
+                if [ "${#HOSTS[@]}" = 0 ]; then
                     break
                 fi
             done
@@ -119,15 +134,38 @@ function _ssh()
     if [ "${#TARGETS[@]}" -gt $MAX_CM_OPEN ]; then
         dbgecho "TOO MANY TARGETS: MAX_CM_OPEN: $MAX_CM_OPEN"
         if [ "$HEURISTIC" = "last-n-conn" ]; then
-            __make_cache_lnc ${HOSTS[@]}
-            dbgecho "TODO"
+            __maybe_make_cache_lnc ${HOSTS[@]}
+            # Read in the cache
+            local NEW_TARGETS
+            NEW_TARGETS=()
+            # Store in $NEW_TARGETS the first $MAX_CM_OPEN lines of $HEURISTIC_CACHE_LNC that appear in $TARGETS
+            while read LNC || [[ -n "$LNC" ]]; do
+                for TARGET in ${TARGETS[@]}; do
+                    if [ ! -z "$TARGET" ] && [ $LNC = $TARGET ]; then
+                        dbgecho "LNC: $TARGET"
+                        NEW_TARGETS+=($TARGET)
+                        TARGETS=("${TARGETS[@]/$TARGET}")
+                        break
+                    fi
+                done
+
+                if [ "${#NEW_TARGETS[@]}" -ge "$MAX_CM_OPEN" ]; then
+                    break
+                fi
+            done < "$HEURISTIC_CACHE_LNC"
+
+            # Update targets:
+            TARGETS=(${NEW_TARGETS[@]})
+            dbgecho "TARGETS [LNC]: ${NEW_TARGETS[@]}"
+
         else
             dbgecho "NO HEURISTIC; ABANDONING ATTEMPT"
             return 128
         fi
     fi
 
-    for TARGET in "${COMPREPLY[@]}"; do
+    dbgecho "TARGETS: ${TARGETS[@]}"
+    for TARGET in "${TARGETS[@]}"; do
         __open_conn "$TARGET" $LAST_USER
     done
 
