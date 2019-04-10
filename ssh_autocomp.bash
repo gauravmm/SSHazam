@@ -3,7 +3,7 @@ SSH_CONFIG_PATHS=~/.ssh/config
 # Maximum number of ControlMaster connections to open:
 MAX_CM_OPEN=1
 # Set to any non-blank value to enable debugging
-DEBUG="Z"
+DEBUG=""
 
 # If there are more than MAX_CM_OPEN connections possible, use this heuristic to select the servers to connect to:
 HEURISTIC="most" # "" "last" "most"
@@ -55,13 +55,12 @@ function __select_conn() {
     # Read in the cache
     # Store in $OPEN_CONN the first $MAX_CM_OPEN lines of $HEURISTIC_FILE that appear in $CANDIDATES
     OPEN_CONN=()
-    IFS=$'\n'
     while read LNC || [[ -n "$LNC" ]]; do
         for TARGET in ${CANDIDATES[@]}; do
-            if [ ! -z "$TARGET" ] && [ $LNC = $TARGET ]; then
+            if [ ! -z "$TARGET" ] && [ "$LNC" = "$TARGET" ]; then
                 dbgecho "SELECT CONN: $TARGET"
-                OPEN_CONN+=($TARGET)
-                CANDIDATES=("${CANDIDATES[@]/$TARGET}")
+                OPEN_CONN+=( "$TARGET" )
+                CANDIDATES=( "${CANDIDATES[@]/$TARGET}" )
                 break
             fi
         done
@@ -97,22 +96,22 @@ function __lock_update() {
 #
 function __heuristic_mc() {
     local CANDIDATES
-    CANDIDATES=("${HOSTS[@]}")
+    CANDIDATES=( ${HOSTS[@]} )
 
-    local IFS="|";
-    local REGEX_REPLACE="s/^.*(${CANDIDATES[*]}).*$/\1/"
+    local CANDIDATE_LIST=$(printf "|%s" "${CANDIDATES[@]}")
+    CANDIDATE_LIST="${CANDIDATE_LIST#|}"
+    local REGEX_REPLACE="s/^.*(${CANDIDATE_LIST}).*$/\1/"
     local REGEX_STRIPNUM="s/^[ ]*[0-9]+ (.*)$/\1/"
 
-    IFS=$'\n'
-    local FREQLINES=($(fc -rl -3000 | grep '^[^a-zA-Z]*ssh' | sed -re "$REGEX_REPLACE" | sort | uniq -c | sort -nr | sed -re "$REGEX_STRIPNUM"))
+    local FREQLINES=( $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh' | sed -re "$REGEX_REPLACE" | sort | uniq -c | sort -nr | sed -re "$REGEX_STRIPNUM") )
 
-    dbgecho "MC CANDIDATES: $FREQLINES"
+    dbgecho "MC CANDIDATES: ${FREQLINES[@]}"
 
-    for LINE in FREQLINES; do
-        for HOST in "${CANDIDATES[@]}"; do
+    for LINE in ${FREQLINES[@]}; do
+        for HOST in ${CANDIDATES[@]}; do
             if [ ! -z "$HOST" ] && [ "$LINE" = "$HOST" ]; then
-                CANDIDATES=("${CANDIDATES[@]/$HOST}")
-                dbgecho "\tMC: $HOST"
+                CANDIDATES=( "${CANDIDATES[@]/$HOST}" )
+                dbgecho "    MC: $HOST"
                 echo $HOST
                 break
             fi
@@ -132,7 +131,7 @@ function __heuristic_lnc() {
         for HOST in "${CANDIDATES[@]}"; do
             if [ ! -z "$HOST" ] && [[ $LINE == *$HOST* ]]; then
                 CANDIDATES=("${CANDIDATES[@]/$HOST}")
-                dbgecho "\tLNC: $HOST"
+                dbgecho "    LNC: $HOST"
                 echo $HOST
                 break
             fi
@@ -197,7 +196,6 @@ function _ssh() {
     HOSTS=$(grep '^Host' $SSH_CONFIG_PATHS 2>/dev/null | grep -v '[?*]' | cut -d ' ' -f 2-)
 
     local TARGETS
-    IFS=$'\n'
     TARGETS=( $(compgen -W "$HOSTS" -- $LAST_SERVER) )
 
     if [ "${#TARGETS[@]}" = 0 ]; then
