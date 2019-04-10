@@ -10,11 +10,21 @@ HEURISTIC="last" # "" "last" "most"
 HEURISTIC_CACHE_LNC=~/.ssh_last_n
 HEURISTIC_CACHE_MC=~/.ssh_most
 
+
+#
+# UTILITY FUNCTIONS
+#
+
 dbgecho() {
     # Comment these out to disable printing debug messages:
     [ ! -z "$DEBUG" ] && echo "$@" >> debug.log
 }
 
+# Global state:
+OPEN_CONN=() # Connections to open
+HOSTS=()     # All possible hosts 
+
+# Check if the passed cache file is out-of-date:
 function __maybe_make_cache() {
     local CACHE_FILE
     CACHE_FILE="$1"
@@ -31,8 +41,7 @@ function __maybe_make_cache() {
     return [ $TS_CONFIG -gt $TS_CACHE ];
 }
 
-# Selected Connections
-OPEN_CONN=()
+# Given a heuristic file and candidates, select the $MAX_CM_OPEN highest-ranked connections to open:
 function __select_conn() {
     local HEURISTIC_FILE CANDIDATES
     HEURISTIC_FILE="$1"
@@ -59,88 +68,72 @@ function __select_conn() {
     done < "$HEURISTIC_FILE"
 }
 
-#
-# MOST-CONNECTED
-#
-function __make_cache_lnc() {
-    local HOSTS
-    HOSTS=("$@")
+# Acquire a lock on the heuristic file; if successful, update the heuristic file the output of an arbitrary function
+function __lock_update() {
+    local HEURISTIC_FILE INNER_FUNC
+    HEURISTIC_FILE="$1"
+    INNER_FUNC="$2"
+    HEURISTIC_FILE_LOCK="$HEURISTIC_FILE.lock"
 
     (
         if flock -n 199; then
-            local ORDERED
-            ORDERED=()
-            for LINE in $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh'); do
-                # dbgecho "SEARCHING FOR ${HOST[@]} IN $LINE"
-                for HOST in "${HOSTS[@]}"; do
-                    if [ ! -z "$HOST" ] && [[ $LINE == *$HOST* ]]; then
-                        dbgecho "ORDERED B: $HOST"
-                        ORDERED+=($HOST)
-                        HOSTS=("${HOSTS[@]/$HOST}")
-                        break
-                    fi
-                done
-
-                if [ "${#HOSTS[@]}" = 0 ]; then
-                    break
-                fi
-            done
-
-            # Write output to cache:
-            printf "%s\n" "${ORDERED[@]}" > "$HEURISTIC_CACHE_LNC"
-            dbgecho "ORDERED: ${ORDERED[@]}"
-
-            rm "$HEURISTIC_CACHE_LNC.lock"
+            # Call the inner function and write output to cache:
+            $INNER_FUNC > "$HEURISTIC_FILE"
+            rm "$HEURISTIC_FILE_LOCK"
         else
-            dbgecho "LNC :: CANNOT ACQUIRE CACHE LOCK"
+            dbgecho "CANNOT ACQUIRE CACHE LOCK"
         fi
-    ) 199>"$HEURISTIC_CACHE_LNC.lock"
-
+    ) 199>"$HEURISTIC_FILE_LOCK"
 }
 
-
 #
-# LAST-N-CONNECTIONS
+# HEURISTICS
 #
-function __make_cache_lnc() {
-    local HOSTS
-    HOSTS=("$@")
+function __heuristic_mc() {
+    local CANDIDATES
+    CANDIDATES="${HOSTS[@]}"
 
-    (
-        if flock -n 199; then
-            local ORDERED
-            ORDERED=()
-            for LINE in $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh'); do
-                # dbgecho "SEARCHING FOR ${HOST[@]} IN $LINE"
-                for HOST in "${HOSTS[@]}"; do
-                    if [ ! -z "$HOST" ] && [[ $LINE == *$HOST* ]]; then
-                        dbgecho "ORDERED B: $HOST"
-                        ORDERED+=($HOST)
-                        HOSTS=("${HOSTS[@]/$HOST}")
-                        break
-                    fi
-                done
+    for LINE in $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh'); do
+        for HOST in "${CANDIDATES[@]}"; do
+            if [ ! -z "$HOST" ] && [[ $LINE == *$HOST* ]]; then
+                CANDIDATES=("${CANDIDATES[@]/$HOST}")
+                dbgecho "\tLNC: $HOST"
+                echo $HOST
+                break
+            fi
+        done
 
-                if [ "${#HOSTS[@]}" = 0 ]; then
-                    break
-                fi
-            done
-
-            # Write output to cache:
-            printf "%s\n" "${ORDERED[@]}" > "$HEURISTIC_CACHE_LNC"
-            dbgecho "ORDERED: ${ORDERED[@]}"
-
-            rm "$HEURISTIC_CACHE_LNC.lock"
-        else
-            dbgecho "LNC :: CANNOT ACQUIRE CACHE LOCK"
+        if [ "${#CANDIDATES[@]}" = 0 ]; then
+            break
         fi
-    ) 199>"$HEURISTIC_CACHE_LNC.lock"
+    done
+}
 
+function __heuristic_lnc() {
+    local CANDIDATES
+    CANDIDATES="${HOSTS[@]}"
+
+    for LINE in $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh'); do
+        for HOST in "${CANDIDATES[@]}"; do
+            if [ ! -z "$HOST" ] && [[ $LINE == *$HOST* ]]; then
+                CANDIDATES=("${CANDIDATES[@]/$HOST}")
+                dbgecho "\tLNC: $HOST"
+                echo $HOST
+                break
+            fi
+        done
+
+        if [ "${#CANDIDATES[@]}" = 0 ]; then
+            break
+        fi
+    done
 }
 
 #
 # MAIN
 #
+
+# Actually open the connection:
 function __open_conn() {
     local SRVSTR CMPATH
     SRVSTR="$2@$1"
@@ -187,9 +180,9 @@ function _ssh()
         *)  LAST_USER="";; # Otherwise, we don't know <user>
     esac
 
-    local HOSTS TARGETS
-    COMPREPLY=()
     HOSTS=$(grep '^Host' $SSH_CONFIG_PATHS 2>/dev/null | grep -v '[?*]' | cut -d ' ' -f 2-)
+
+    local TARGETS
     TARGETS=($(compgen -W "$HOSTS" -- $LAST_SERVER))
 
     if [ "${#TARGETS[@]}" = 0 ]; then
@@ -200,6 +193,7 @@ function _ssh()
     dbgecho "TARGETS ${#TARGETS[@]}: ${TARGETS[@]/#/-> }"
 
     # If the username is defined, add that to the front of each suggested server:
+    COMPREPLY=()
     if [ -z "$LAST_USER" ]; then 
         COMPREPLY=(${TARGETS[@]})
     else
@@ -215,14 +209,16 @@ function _ssh()
 
         if [ "$HEURISTIC" = "last" ]; then
             if __maybe_make_cache "$HEURISTIC_CACHE_LNC"; then
-                __make_cache_lnc ${HOSTS[@]}
+                __lock_update "$HEURISTIC_CACHE_LNC" __heuristic_lnc
             fi
+            # Update OPEN_CONN using the LNC heuristic:
             __select_conn "$HEURISTIC_CACHE_LNC" ${TARGETS[@]}
 
         if [ "$HEURISTIC" = "most" ]; then
             if __maybe_make_cache "$HEURISTIC_CACHE_MC"; then
-                __make_cache_mc ${HOSTS[@]}
+                __lock_update "$HEURISTIC_CACHE_MC" __heuristic_mc
             fi
+            # Update OPEN_CONN using the MC heuristic:
             __select_conn "$HEURISTIC_CACHE_MC" ${TARGETS[@]}
 
         else
