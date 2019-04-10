@@ -3,10 +3,10 @@ SSH_CONFIG_PATHS=~/.ssh/config
 # Maximum number of ControlMaster connections to open:
 MAX_CM_OPEN=1
 # Set to any non-blank value to enable debugging
-DEBUG=""
+DEBUG="Z"
 
 # If there are more than MAX_CM_OPEN connections possible, use this heuristic to select the servers to connect to:
-HEURISTIC="last" # "" "last" "most"
+HEURISTIC="most" # "" "last" "most"
 HEURISTIC_CACHE_LNC=~/.ssh_last_n
 HEURISTIC_CACHE_MC=~/.ssh_most
 
@@ -31,6 +31,8 @@ function __maybe_make_cache() {
 
     local TS_CACHE TS_CONFIG CFG TS_CFG
 
+    [ -f "$CACHE_FILE" ] || return 0
+
     TS_CACHE=$(stat -c %Y "$CACHE_FILE")
     TS_CONFIG=$(date -d "-1 day" +%s) # One day ago; this way we renew the cache daily
     for CFG in $SSH_CONFIG_PATHS; do
@@ -38,7 +40,8 @@ function __maybe_make_cache() {
         (( $TS_CFG > $TS_CONFIG )) && TS_CONFIG=$TS_CFG
     done
 
-    return [ $TS_CONFIG -gt $TS_CACHE ];
+    test $TS_CONFIG -gt $TS_CACHE
+    return $?
 }
 
 # Given a heuristic file and candidates, select the $MAX_CM_OPEN highest-ranked connections to open:
@@ -52,11 +55,12 @@ function __select_conn() {
     # Read in the cache
     # Store in $OPEN_CONN the first $MAX_CM_OPEN lines of $HEURISTIC_FILE that appear in $CANDIDATES
     OPEN_CONN=()
+    IFS=$'\n'
     while read LNC || [[ -n "$LNC" ]]; do
         for TARGET in ${CANDIDATES[@]}; do
             if [ ! -z "$TARGET" ] && [ $LNC = $TARGET ]; then
-                dbgecho "LNC: $TARGET"
-                NEW_CANDIDATES+=($TARGET)
+                dbgecho "SELECT CONN: $TARGET"
+                OPEN_CONN+=($TARGET)
                 CANDIDATES=("${CANDIDATES[@]/$TARGET}")
                 break
             fi
@@ -75,11 +79,13 @@ function __lock_update() {
     INNER_FUNC="$2"
     HEURISTIC_FILE_LOCK="$HEURISTIC_FILE.lock"
 
+    dbgecho "UPDATE FILE $HEURISTIC_FILE"
     (
         if flock -n 199; then
             # Call the inner function and write output to cache:
             $INNER_FUNC > "$HEURISTIC_FILE"
             rm "$HEURISTIC_FILE_LOCK"
+            dbgecho "SUCCESFULLY UPDATED"
         else
             dbgecho "CANNOT ACQUIRE CACHE LOCK"
         fi
@@ -91,14 +97,18 @@ function __lock_update() {
 #
 function __heuristic_mc() {
     local CANDIDATES
-    CANDIDATES="${HOSTS[@]}"
+    CANDIDATES=("${HOSTS[@]}")
 
     local IFS="|";
     local REGEX_REPLACE="s/^.*(${CANDIDATES[*]}).*$/\1/"
-    local REGEX_DELETE="/^(${CANDIDATES[*]})$/\!d"
     local REGEX_STRIPNUM="s/^[ ]*[0-9]+ (.*)$/\1/"
 
-    for LINE in $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh' | sed -re "$REGEX_REPLACE" -re "$REGEX_DELETE" | sort | uniq -c | sort -nr | sed "$REGEX_STRIPNUM" ); do
+    IFS=$'\n'
+    local FREQLINES=($(fc -rl -3000 | grep '^[^a-zA-Z]*ssh' | sed -re "$REGEX_REPLACE" | sort | uniq -c | sort -nr | sed -re "$REGEX_STRIPNUM"))
+
+    dbgecho "MC CANDIDATES: $FREQLINES"
+
+    for LINE in FREQLINES; do
         for HOST in "${CANDIDATES[@]}"; do
             if [ ! -z "$HOST" ] && [ "$LINE" = "$HOST" ]; then
                 CANDIDATES=("${CANDIDATES[@]/$HOST}")
@@ -169,8 +179,7 @@ function __open_conn() {
     ( ssh -MNnf -oBatchMode=yes "$SRVSTR" >/dev/null 2>&1 & )
 }
 
-function _ssh() 
-{
+function _ssh() {
     dbgecho ""
     dbgecho "*********************"
 
@@ -188,7 +197,8 @@ function _ssh()
     HOSTS=$(grep '^Host' $SSH_CONFIG_PATHS 2>/dev/null | grep -v '[?*]' | cut -d ' ' -f 2-)
 
     local TARGETS
-    TARGETS=($(compgen -W "$HOSTS" -- $LAST_SERVER))
+    IFS=$'\n'
+    TARGETS=( $(compgen -W "$HOSTS" -- $LAST_SERVER) )
 
     if [ "${#TARGETS[@]}" = 0 ]; then
         dbgecho "NO TARGETS FOUND"
@@ -208,9 +218,7 @@ function _ssh()
     # Now COMPREPLY contains the list of matching hosts.
 
     if [ "${#TARGETS[@]}" -gt $MAX_CM_OPEN ]; then
-        dbgecho "TOO MANY TARGETS: MAX_CM_OPEN: $MAX_CM_OPEN"
-        local NEW_TARGETS
-        NEW_TARGETS=()
+        dbgecho "TOO MANY TARGETS; USING HEURISTIC TO SELECT $MAX_CM_OPEN"
 
         if [ "$HEURISTIC" = "last" ]; then
             if __maybe_make_cache "$HEURISTIC_CACHE_LNC"; then
@@ -219,7 +227,7 @@ function _ssh()
             # Update OPEN_CONN using the LNC heuristic:
             __select_conn "$HEURISTIC_CACHE_LNC" ${TARGETS[@]}
 
-        if [ "$HEURISTIC" = "most" ]; then
+        elif [ "$HEURISTIC" = "most" ]; then
             if __maybe_make_cache "$HEURISTIC_CACHE_MC"; then
                 __lock_update "$HEURISTIC_CACHE_MC" __heuristic_mc
             fi
