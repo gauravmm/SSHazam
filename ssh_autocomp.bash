@@ -93,11 +93,16 @@ function __heuristic_mc() {
     local CANDIDATES
     CANDIDATES="${HOSTS[@]}"
 
-    for LINE in $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh'); do
+    local IFS="|";
+    local REGEX_REPLACE="s/^.*(${CANDIDATES[*]}).*$/\1/"
+    local REGEX_DELETE="/^(${CANDIDATES[*]})$/\!d"
+    local REGEX_STRIPNUM="s/^[ ]*[0-9]+ (.*)$/\1/"
+
+    for LINE in $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh' | sed -re "$REGEX_REPLACE" -re "$REGEX_DELETE" | sort | uniq -c | sort -nr | sed "$REGEX_STRIPNUM" ); do
         for HOST in "${CANDIDATES[@]}"; do
-            if [ ! -z "$HOST" ] && [[ $LINE == *$HOST* ]]; then
+            if [ ! -z "$HOST" ] && [ "$LINE" = "$HOST" ]; then
                 CANDIDATES=("${CANDIDATES[@]/$HOST}")
-                dbgecho "\tLNC: $HOST"
+                dbgecho "\tMC: $HOST"
                 echo $HOST
                 break
             fi
