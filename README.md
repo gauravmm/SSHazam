@@ -25,14 +25,16 @@ Configuration information is stored in the head of the file itself. You can set 
 
  - `SSH_CONFIG_PATHS`: a space-separated list of paths to search for `HOST` directives.
  - `MAX_CM_OPEN`: the maximum number of ControlMaster connections to open; if there are more than these many possible servers in your auto-complete then use a heuristic to decide which connections to open.
- - `HEURISTIC`: the heuristic to use to decide which connections to open; values are `""`, `"last-n-conn"`
+ - `HEURISTIC`: the heuristic to use to decide which connections to open; values are `""`, `"last"`, `"most"`
  - `DEBUG`: set this to `""` to disable debug output, or any other value to enable it. 
- - `HEURISTIC_CACHE_LNC`: cache for `last-n-conn` heuristic
+ - `HEURISTIC_CACHE_LNC`: cache file for `last` heuristic
+ - `HEURISTIC_CACHE_MC`: cache file for `most` heuristic
 
 ### Heuristics
 
  - `""`: If a blank heuristic is specified no automatic connections are made.
- - `"last-n-conn"`: Open the `$MAX_CM_OPEN` servers most recently connected to; this heuristic updates its list of recently-connected servers every day or whenever any file in `SSH_CONFIG_PATHS` is updated.
+ - `"last"`: Open the `$MAX_CM_OPEN` servers most recently connected to; this heuristic updates its list of recently-connected servers every day or whenever any file in `SSH_CONFIG_PATHS` is updated.
+ - `"most"`: Open the `$MAX_CM_OPEN` servers most often connected to; this heuristic updates its list of recently-connected servers every day or whenever any file in `SSH_CONFIG_PATHS` is updated.
 
 ### Debugging
 
