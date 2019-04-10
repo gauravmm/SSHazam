@@ -2,13 +2,16 @@
 SSH_CONFIG_PATHS=~/.ssh/config
 # Maximum number of ControlMaster connections to open:
 MAX_CM_OPEN=1
+# Set to any non-blank value to enable debugging
+DEBUG=""
+
 # If there are more than MAX_CM_OPEN connections possible, use this heuristic to select the servers to connect to:
 HEURISTIC="last-n-conn"
 HEURISTIC_CACHE_LNC=~/.ssh_last_n
 
 dbgecho() {
     # Comment these out to disable printing debug messages:
-    echo "$@" >> debug.log
+    [ ! -z "$DEBUG" ] && echo "$@" >> debug.log
 }
 
 function __maybe_make_cache_lnc() {
@@ -96,7 +99,8 @@ function __open_conn() {
 
 function _ssh() 
 {
-    dbgecho "*"
+    dbgecho ""
+    dbgecho "*********************"
 
     local LAST_WORD LAST_SERVER LAST_USER
 
