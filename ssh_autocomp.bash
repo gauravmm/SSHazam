@@ -33,10 +33,10 @@ function __maybe_make_cache() {
 
     [ -f "$CACHE_FILE" ] || return 0
 
-    TS_CACHE=$(stat -c %Y "$CACHE_FILE")
+    TS_CACHE=$(gstat -c %Y "$CACHE_FILE")
     TS_CONFIG=$(date -d "-1 day" +%s) # One day ago; this way we renew the cache daily
     for CFG in $SSH_CONFIG_PATHS; do
-        TS_CFG=$(stat -c %Y $CFG)
+        TS_CFG=$(gstat -c %Y $CFG)
         (( $TS_CFG > $TS_CONFIG )) && TS_CONFIG=$TS_CFG
     done
 
@@ -103,7 +103,7 @@ function __heuristic_mc() {
     local REGEX_REPLACE="s/^.*(${CANDIDATE_LIST}).*$/\1/"
     local REGEX_STRIPNUM="s/^[ ]*[0-9]+ (.*)$/\1/"
 
-    local FREQLINES=( $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh' | sed -re "$REGEX_REPLACE" | sort | uniq -c | sort -nr | sed -re "$REGEX_STRIPNUM") )
+    local FREQLINES=( $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh' | gsed -re "$REGEX_REPLACE" | sort | uniq -c | sort -nr | gsed -re "$REGEX_STRIPNUM") )
 
     dbgecho "MC CANDIDATES: ${FREQLINES[@]}"
 
