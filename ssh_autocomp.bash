@@ -20,6 +20,25 @@ dbgecho() {
     [ ! -z "$DEBUG" ] && echo "$@" >> debug.log
 }
 
+
+function firstcmd() {
+    for ALTERNATIVE in "$@"; do
+        if command -v "$ALTERNATIVE" 1>/dev/null 2>&1; then
+            echo -n "$ALTERNATIVE"
+            return
+        fi
+    done
+    dbgecho "No Alternatives Found: $@"
+}
+
+
+# Binaries; automatically use the first binary that exists
+BIN_STAT=$(firstcmd stat gstat )
+BIN_SED=$(firstcmd sed gsed )
+
+dbgecho "SELECTED $BIN_STAT FOR stat"
+dbgecho "SELECTED $BIN_SED FOR sed"
+
 # Global state:
 OPEN_CONN=() # Connections to open
 HOSTS=()     # All possible hosts 
@@ -33,10 +52,10 @@ function __maybe_make_cache() {
 
     [ -f "$CACHE_FILE" ] || return 0
 
-    TS_CACHE=$(stat -c %Y "$CACHE_FILE")
+    TS_CACHE=$($BIN_STAT -c %Y "$CACHE_FILE")
     TS_CONFIG=$(date -d "-1 day" +%s) # One day ago; this way we renew the cache daily
     for CFG in $SSH_CONFIG_PATHS; do
-        TS_CFG=$(stat -c %Y $CFG)
+        TS_CFG=$($BIN_STAT -c %Y $CFG)
         (( $TS_CFG > $TS_CONFIG )) && TS_CONFIG=$TS_CFG
     done
 
@@ -103,7 +122,7 @@ function __heuristic_mc() {
     local REGEX_REPLACE="s/^.*(${CANDIDATE_LIST}).*$/\1/"
     local REGEX_STRIPNUM="s/^[ ]*[0-9]+ (.*)$/\1/"
 
-    local FREQLINES=( $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh' | sed -re "$REGEX_REPLACE" | sort | uniq -c | sort -nr | sed -re "$REGEX_STRIPNUM") )
+    local FREQLINES=( $(fc -rl -3000 | grep '^[^a-zA-Z]*ssh' | "$BIN_SED" -re "$REGEX_REPLACE" | sort | uniq -c | sort -nr | "$BIN_SED" -re "$REGEX_STRIPNUM") )
 
     dbgecho "MC CANDIDATES: ${FREQLINES[@]}"
 
