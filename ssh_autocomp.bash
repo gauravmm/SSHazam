@@ -2,8 +2,7 @@
 SSH_CONFIG_PATHS=~/.ssh/config
 # Maximum number of ControlMaster connections to open:
 MAX_CM_OPEN=1
-# Set to any non-blank value to enable debugging
-DEBUG=""
+# To enable debugging, run `touch debug.log`.
 
 # If there are more than MAX_CM_OPEN connections possible, use this heuristic to select the servers to connect to:
 HEURISTIC="most" # "" "last" "most"
@@ -11,13 +10,20 @@ HEURISTIC_CACHE_LNC=~/.ssh_last_n
 HEURISTIC_CACHE_MC=~/.ssh_most
 
 
+# Compatibility mode:
+OUTPUT_WITHOUT_ATPREFIX=false
+if [[ "$BASH_VERSION" == 3.2.* ]]; then
+    OUTPUT_WITHOUT_ATPREFIX=true
+    dbgecho "DETECTED BASH 3.2.X; USING OUTPUT_WITHOUT_ATPREFIX"
+fi
+
 #
 # UTILITY FUNCTIONS
 #
 
 dbgecho() {
     # Comment these out to disable printing debug messages:
-    [ ! -z "$DEBUG" ] && echo "$@" >> debug.log
+    [ -f "./debug.log" ] && echo "$@" >> "debug.log"
 }
 
 
@@ -202,6 +208,7 @@ function __open_conn() {
 function _ssh() {
     dbgecho ""
     dbgecho "*********************"
+    dbgecho "${COMP_WORDS[COMP_CWORD]}"
 
     local LAST_WORD LAST_SERVER LAST_USER
 
@@ -229,9 +236,13 @@ function _ssh() {
     # If the username is defined, add that to the front of each suggested server:
     COMPREPLY=()
     if [ -z "$LAST_USER" ]; then 
-        COMPREPLY=(${TARGETS[@]})
+        COMPREPLY=( "${TARGETS[@]}" )
     else
-        COMPREPLY=(${TARGETS[@]/#/$LAST_USER@})
+        if [ $OUTPUT_WITHOUT_ATPREFIX = true ]; then
+            COMPREPLY=( "${TARGETS[@]/#/@}" )
+        else
+            COMPREPLY=( "${TARGETS[@]/#/$LAST_USER@}" )
+        fi
     fi
     dbgecho "COMPREPLY ${#COMPREPLY[@]}: ${COMPREPLY[@]/#/-> }"
     # Now COMPREPLY contains the list of matching hosts.
