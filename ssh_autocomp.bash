@@ -33,11 +33,13 @@ function firstcmd() {
 
 
 # Binaries; automatically use the first binary that exists
-BIN_STAT=$(firstcmd stat gstat )
-BIN_SED=$(firstcmd sed gsed )
+BIN_STAT=$(firstcmd gstat stat)
+BIN_SED=$(firstcmd gsed sed)
+BIN_DATE=$(firstcmd gdate date)
 
 dbgecho "SELECTED $BIN_STAT FOR stat"
 dbgecho "SELECTED $BIN_SED FOR sed"
+dbgecho "SELECTED $BIN_DATE FOR date"
 
 # Global state:
 OPEN_CONN=() # Connections to open
@@ -53,7 +55,7 @@ function __maybe_make_cache() {
     [ -f "$CACHE_FILE" ] || return 0
 
     TS_CACHE=$($BIN_STAT -c %Y "$CACHE_FILE")
-    TS_CONFIG=$(date -d "-1 day" +%s) # One day ago; this way we renew the cache daily
+    TS_CONFIG=$($BIN_DATE -d "-1 day" +%s) # One day ago; this way we renew the cache daily
     for CFG in $SSH_CONFIG_PATHS; do
         TS_CFG=$($BIN_STAT -c %Y $CFG)
         (( $TS_CFG > $TS_CONFIG )) && TS_CONFIG=$TS_CFG
