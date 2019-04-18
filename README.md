@@ -15,11 +15,18 @@ It supports these types of commands to connect to server `yggdrasil`:
 
 It does not support changing verbosity for connection debugging: `ssh -v`, `ssh -vvv`, etc. (ControlMaster client connections have the same verbosity as the master connection.)
 
+## Requirements
+
+This requires a reasonably modern version of `bash`. We recommend BASH 4.4.18 or later; this corresponds to the default shell on Ubuntu 16.04 and later. However, the default BASH 3.2 on OS X will usually work.
+
+For OS X, the following steps must first be executed. (For Ubuntu, these are unnecessary.):
+* Optional: Upgrade bash version via instructions [here](https://itnext.io/upgrading-bash-on-macos-7138bd1066ba).
+* Install `flock` via instructions [here](https://github.com/discoteq/flock).
+* Install `coreutils` via instructions [here](https://github.com/labbots/google-drive-upload/issues/12).
+
 ## Usage
 
-This requires a reasonably modern version of `bash`. We recommend BASH 4.4.18 or later; this corresponds to the default shell on Ubuntu 16.04 and later.
-
-To use it once, download the script and run `source ssh_autocomp.bash`. To install it, save it somewhere and add the `source` line to your `~/.bashrc` or `~/.bash_profile` or similar.
+To use this utility once, download the script and run `source ssh_autocomp.bash`. To install it, save it somewhere and add the `source` line to your `~/.bashrc` or `~/.bash_profile` or similar.
 
 Configuration information is stored in the head of the file itself. You can set the following variables:
 
