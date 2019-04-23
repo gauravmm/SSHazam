@@ -1,4 +1,4 @@
-# Insert-Punny-Name-Here
+# SSHazam!
 
 This tool speculatively opens SSH ControlMaster connections when you use `bash` autocomplete to fill in a server name. It saves you `<duration>` of annoyance every day!
 
