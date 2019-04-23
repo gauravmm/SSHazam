@@ -1,7 +1,7 @@
 # Space-separated list of paths to search for HOST directives:
 SSH_CONFIG_PATHS=~/.ssh/config
 # Maximum number of ControlMaster connections to open:
-MAX_CM_OPEN=1
+MAX_CM_OPEN=3
 # To enable debugging, run `touch debug.log`.
 
 # If there are more than MAX_CM_OPEN connections possible, use this heuristic to select the servers to connect to:
