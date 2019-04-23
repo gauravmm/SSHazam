@@ -33,9 +33,10 @@ Configuration information is stored in the head of the file itself. You can set 
  - `SSH_CONFIG_PATHS`: a space-separated list of paths to search for `HOST` directives.
  - `MAX_CM_OPEN`: the maximum number of ControlMaster connections to open; if there are more than these many possible servers in your auto-complete then use a heuristic to decide which connections to open.
  - `HEURISTIC`: the heuristic to use to decide which connections to open; values are `""`, `"last"`, `"most"`
- - `DEBUG`: set this to `""` to disable debug output, or any other value to enable it. 
  - `HEURISTIC_CACHE_LNC`: cache file for `last` heuristic
  - `HEURISTIC_CACHE_MC`: cache file for `most` heuristic
+ 
+Remember to run `source ssh_autocomp.bash` each time you change the file!
 
 ### Heuristics
 
@@ -45,4 +46,4 @@ Configuration information is stored in the head of the file itself. You can set 
 
 ### Debugging
 
-Set `DEBUG` to any non-blank value and, in a separate terminal window, run `tail -f debug.log` to see debug messages as they are generated. Remember to run `source ssh_autocomp.bash` each time you change the file!
+In a separate terminal window, run `touch debug.log` and then run `tail -f debug.log` to see debug messages as they are generated.
