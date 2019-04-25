@@ -221,7 +221,7 @@ function _ssh() {
         *)  LAST_USER="";; # Otherwise, we don't know <user>
     esac
 
-    HOSTS=$(grep '^Host' $SSH_CONFIG_PATHS 2>/dev/null | grep -v '[?*]' | cut -d ' ' -f 2-)
+    HOSTS=$(grep -i '^Host' $SSH_CONFIG_PATHS 2>/dev/null | grep -v '[?*]' | cut -d ' ' -f 2-)
 
     local TARGETS
     TARGETS=( $(compgen -W "$HOSTS" -- $LAST_SERVER) )
