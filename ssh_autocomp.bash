@@ -9,6 +9,13 @@ HEURISTIC="most" # "" "last" "most"
 HEURISTIC_CACHE_LNC=~/.ssh_last_n
 HEURISTIC_CACHE_MC=~/.ssh_most
 
+#
+# UTILITY FUNCTIONS
+#
+dbgecho() {
+    # Comment these out to disable printing debug messages:
+    [ -f "./debug.log" ] && echo "$@" >> "debug.log"
+}
 
 # Compatibility mode:
 OUTPUT_WITHOUT_ATPREFIX=false
@@ -20,12 +27,6 @@ fi
 #
 # UTILITY FUNCTIONS
 #
-
-dbgecho() {
-    # Comment these out to disable printing debug messages:
-    [ -f "./debug.log" ] && echo "$@" >> "debug.log"
-}
-
 
 function firstcmd() {
     for ALTERNATIVE in "$@"; do
