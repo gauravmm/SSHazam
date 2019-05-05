@@ -203,7 +203,7 @@ function __open_conn() {
 
     dbgecho "OPEN CONTROLMASTER CONNECTION TO $SRVSTR"
     # Start an SSH  (-M) master connection, (-N) do not execute anything, (-n) do not read anything from stdin, (-f) go to background, (-oBatchMode) fail rather than ask for a password
-    ( ssh -MNnf -oBatchMode=yes "$SRVSTR" >/dev/null 2>&1 & )
+    ( ssh -MNnf -oChallengeResponseAuthentication=no -oPasswordAuthentication=no -oBatchMode=yes "$SRVSTR" >/dev/null 2>&1 & )
 }
 
 function _ssh() {
